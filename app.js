@@ -31,7 +31,8 @@ function start() {
             "View All Employees By Department",
             "View All Employees By Role",
             "View All Employees",
-            "Update Employee Role"
+            "Update Employee Role",
+            "Exit"
         ]
       })
       .then(function(answer) {
@@ -62,6 +63,10 @@ function start() {
 
             case "Update Employee Role": 
                 updateRole();
+                break;
+
+            case "Exit": 
+                exit();
                 break;
         
             default:
@@ -112,8 +117,8 @@ function addRole() {
             },
             {
               name: "department",
-              type: "rawlist",
-              choices: results.map(dept => dept.dept_name),
+              type: "list",
+              choices: results.map(dept => ({name: dept.dept_name, value: dept.id})),
               message: "What department does this role go under?"
             }
           ])
@@ -123,13 +128,7 @@ function addRole() {
                 {
                     title: answer.title,
                     salary: answer.salary,
-                    department_id: function() {
-                        for (let i = 0; i < results.length; i++) {
-                            if (answer.department === results.dept_name) {
-                                answer.department = results[i].id;
-                            }
-                        }
-                    }
+                    department_id: answer.department
                 },
                 function(err, res) {
                     if (err) throw err;
@@ -143,69 +142,67 @@ function addRole() {
 };
 
 function addEmployee() {
-    connection.query("SELECT * FROM role", function(err, results) {
-        if (err) throw err;
-        // once you have the items, prompt the user for which they'd like to bid on
-        inquirer
-          .prompt([
-            {
-                name: "firstName",
-                type: "input",
-                message: "What is the employees first name?"
-            },
-            {
-                name: "lastName",
-                type: "input",
-                message: "What is the employees last name?"
-            },
-            {
-              name: "role",
-              type: "rawlist",
-              choices: results.map(role => role.title),
-              message: "What is this employees role?"
-            },
-            {
-                name: "manager",
-                type: "input",
-                message: "Enter manager Id"
-            }
-          ])
-          .then(function(answer) {
-            var query = connection.query(
-                "INSERT INTO employee SET ?",
+    connection.query("SELECT id, first_name, last_name FROM employee", function(err, empResults) {
+        connection.query("SELECT id, title FROM role", function(err, roleResults) {
+            if (err) throw err;
+
+            inquirer
+            .prompt([
                 {
-                    first_name: answer.firstName,
-                    last_name: answer.lastName,
-                    manager_id: answer.manager,
-                    role_id: function() {
-                        for (let i = 0; i < results.length; i++) {
-                            if (answer.role === results.title) {
-                                answer.role = results[i].id;
-                            }
-                        }
-                    }
+                    name: "firstName",
+                    type: "input",
+                    message: "What is the employees first name?"
                 },
-                function(err, res) {
-                    if (err) throw err;
-                    console.log(res.affectedRows + " Employee Added!\n");
-                    // Call updateProduct AFTER the INSERT completes
-                    start();
+                {
+                    name: "lastName",
+                    type: "input",
+                    message: "What is the employees last name?"
+                },
+                {
+                  name: "role",
+                  type: "list",
+                  choices: roleResults.map(roleItem => ({name: roleItem.title, value: roleItem.id})),
+                  message: "What is this employees role?"
+                },
+                {
+                    name: "manager",
+                    type: "list",
+                    choices: empResults.map(managerItem => ({name: `${managerItem.first_name} ${managerItem.last_name}`, value: managerItem.id})),
+                    message: "Who is this employees manager?"
                 }
-            )
-          });
-      });
+            ])
+            .then(function(answer) {
+                var query = connection.query(
+                    "INSERT INTO employee SET ?",
+                    {
+                        first_name: answer.firstName,
+                        last_name: answer.lastName,
+                        role_id: answer.role,
+                        manager_id: answer.manager,
+                    },
+                    function(err, res) {
+                        if (err) throw err;
+                        console.log(res.affectedRows + " Employee Added!\n");
+                        // Call updateProduct AFTER the INSERT completes
+                        start();
+                    }
+                )
+            });
+        });
+    });
 };
 
 function viewDepartment() {
-    connection.query("SELECT employee.id, employee.first_name, employee.last_name, role.title, department.dept_name, role.salary FROM employee LEFT JOIN role ON employee.role_id=role.id LEFT JOIN department ON role.department_id=department.id ORDER BY dept_name", function(err, results) {
+    connection.query("SELECT employee.id, employee.first_name, employee.last_name, role.title, department.dept_name, role.salary, CONCAT(m.first_name, ', ', m.last_name) AS Manager FROM employee LEFT JOIN role ON employee.role_id=role.id LEFT JOIN department ON role.department_id=department.id LEFT JOIN employee m ON employee.manager_id=m.id ORDER BY dept_name", function(err, results) {
         if (err) throw err;
         // Log all results of the SELECT statement
         console.table(results);
         start();
     })
 };
+
 function viewRole() {
-    connection.query("SELECT employee.id, employee.first_name, employee.last_name, role.title, department.dept_name, role.salary FROM employee LEFT JOIN role ON employee.role_id=role.id LEFT JOIN department ON role.department_id=department.id ORDER BY role.title", function(err, results) {
+    connection.query("SELECT employee.id, employee.first_name, employee.last_name, role.title, department.dept_name, role.salary, CONCAT(m.first_name, ', ', m.last_name) AS Manager FROM employee LEFT JOIN role ON employee.role_id=role.id LEFT JOIN department ON role.department_id=department.id LEFT JOIN employee m ON employee.manager_id=m.id ORDER BY role.title", function(err, results) {
         if (err) throw err;
         // Log all results of the SELECT statement
         console.table(results);
@@ -214,7 +211,7 @@ function viewRole() {
 };
 
 function viewEmployee() {
-    connection.query("SELECT employee.id, employee.first_name, employee.last_name, role.title, department.dept_name, role.salary FROM employee LEFT JOIN role ON employee.role_id=role.id LEFT JOIN department ON role.department_id=department.id", function(err, results) {
+    connection.query("SELECT employee.id, employee.first_name, employee.last_name, role.title, department.dept_name, role.salary, CONCAT(m.first_name, ', ', m.last_name) AS Manager FROM employee LEFT JOIN role ON employee.role_id=role.id LEFT JOIN department ON role.department_id=department.id LEFT JOIN employee m ON employee.manager_id=m.id", function(err, results) {
         if (err) throw err;
         // Log all results of the SELECT statement
         console.table(results);
@@ -223,22 +220,22 @@ function viewEmployee() {
 };
 
 function updateRole() {
-    connection.query("SELECT * FROM employee, role", function(err, results) {
+    connection.query("SELECT id, first_name, last_name FROM employee", function(err, empResults) {
+    connection.query("SELECT id, title FROM role", function(err, roleResults) {
         if (err) throw err;
-        // once you have the items, prompt the user for which they'd like to bid on
         inquirer
           .prompt([
             {
               name: "employeeName",
-              type: "rawlist",
-              choices: results.map(employee => `${employee.first_name}`),
+              type: "list",
+              choices: empResults.map(employee => ({name: `${employee.first_name} ${employee.last_name}`, value: employee.id})),
               message: "Which employee would you like to update?"
             },
             {
                 name: "role",
-                type: "rawlist",
-                choices: results.map(role => role.title),
-                message: "Select new role?"
+                type: "list",
+                choices: roleResults.map(role => ({name: role.title, value: role.id})),
+                message: "Select the new role"
               },
           ])
           .then(function(answer) {
@@ -246,17 +243,12 @@ function updateRole() {
                 "UPDATE employee SET ? WHERE ?",
                 [
                     {
-                        role_id: function() {
-                            for (let i = 0; i < results.length; i++) {
-                                if (answer.role === results.title) {
-                                    answer.role = results[i].id;
-                                }
-                            }
-                        }
+                        role_id: answer.role
                     },
                     {
-                        first_name: answer.employeeName
+                        id: answer.employeeName
                     }
+                    
                 ],
                 function(err, res) {
                     if (err) throw err;
@@ -266,5 +258,11 @@ function updateRole() {
                 }
             )
           });
+        });
       });
+};
+
+function exit() {
+    console.log("Logging Off...");
+    connection.end();
 };
